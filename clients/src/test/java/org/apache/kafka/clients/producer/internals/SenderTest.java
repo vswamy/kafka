@@ -161,6 +161,43 @@ public class SenderTest {
     }
 
     @Test
+    public void testFlush() throws Exception {
+        long offset = 0;
+        Future<RecordMetadata> future1 = accumulator.append(
+            tp0,
+            0L,
+            "key1".getBytes(),
+            "value1".getBytes(),
+            null,
+            null,
+            MAX_BLOCK_TIMEOUT
+        ).future;
+        Future<RecordMetadata> future2 = accumulator.append(
+            tp0,
+            0L,
+            "key2".getBytes(),
+            "value2".getBytes(),
+            null,
+            null,
+            MAX_BLOCK_TIMEOUT
+        ).future;
+        sender.run(time.milliseconds());
+        sender.run(time.milliseconds());
+        assertEquals(1, sender.inFlightBatches(tp0).size());
+        assertTrue(client.hasInFlightRequests());
+        assertFalse(accumulator.flushInProgress());
+        accumulator.beginFlush();
+        assertTrue(accumulator.flushInProgress());
+        client.respond(produceResponse(tp0, offset, Errors.MESSAGE_TOO_LARGE, 0));
+        sender.run(time.milliseconds());
+        accumulator.awaitFlushCompletion();
+        assertFalse(accumulator.flushInProgress());
+        assertTrue(accumulator.hasIncomplete());
+        assertFalse(future1.isDone());
+        assertFalse(future2.isDone());
+    }
+
+    @Test
     public void testMessageFormatDownConversion() throws Exception {
         // this test case verifies the behavior when the version of the produce request supported by the
         // broker changes after the record set is created
